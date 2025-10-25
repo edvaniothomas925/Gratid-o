@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Favicon Configuration -->
+    <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32/FFF8E1/EAB308.png?text=G" />
+    <link rel="icon" type="image/png" sizes="16x16" href="https://placehold.co/16x16/FFF8E1/EAB308.png?text=G" />
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- SEO & Social Meta Tags -->
+    <title>Diário de Gratidão com IA - Registre e Reflita</title>
+    <meta name="description" content="Um aplicativo de diário para registrar momentos de gratidão, com reflexões personalizadas geradas por IA para inspirar e elevar seu espírito." />
+    <meta name="keywords" content="diário de gratidão, gratidão, diário online, inteligência artificial, bem-estar, mindfulness, reflexão diária" />
+    
+    <!-- PWA & Mobile Meta Tags -->
+    <meta name="theme-color" content="#a16207" />
+    <link rel="apple-touch-icon" href="https://placehold.co/180x180/FFF8E1/EAB308.png?text=G" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Open Graph Tags -->
+    <meta property="og:title" content="Diário de Gratidão com IA - Registre e Reflita" />
+    <meta property="og:description" content="Comece a registrar seus momentos de gratidão e receba reflexões inspiradoras geradas por IA." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://placehold.co/1200x630/FFF8E1/EAB308?text=Diário+de+Gratidão+com+IA" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Montserrat:wght@400;500;600&display=swap');
+      
+      body {
+        font-family: 'Montserrat', sans-serif;
+        /* Define cores base para a transição funcionar */
+        background-color: #f5f5f4; /* Cor base do tema claro (stone-100) */
+        color: #292524; /* Cor do texto base do tema claro (stone-800) */
+        transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+      }
+
+      /* Quando a classe 'dark' está no <html>, muda as cores do <body> */
+      html.dark body {
+        background-color: #1c1917; /* Cor base do tema escuro (stone-900) */
+        color: #e7e5e4; /* Cor do texto base do tema escuro (stone-200) */
+      }
+
+      h1, h2, h3, h4, h5, h6, .font-serif {
+        font-family: 'Merriweather', serif;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.548.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

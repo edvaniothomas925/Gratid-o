@@ -1,0 +1,21 @@
+{
+  "short_name": "Gratidão",
+  "name": "Diário de Gratidão com IA",
+  "description": "Um aplicativo de diário para registrar momentos de gratidão, com reflexões personalizadas geradas por IA para inspirar e elevar seu espírito.",
+  "icons": [
+    {
+      "src": "https://placehold.co/192x192/FFF8E1/EAB308.png?text=G",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://placehold.co/512x512/FFF8E1/EAB308.png?text=G",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#a16207",
+  "background_color": "#f5f5f4"
+}
