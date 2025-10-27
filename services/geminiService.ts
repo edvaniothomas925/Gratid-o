@@ -11,11 +11,14 @@ export const generateReflection = async (entryText: string): Promise<string> => 
   const ai = new GoogleGenAI({ apiKey: API_KEY });
 
   try {
-    const prompt = `Com base nesta entrada de diário de gratidão: "${entryText}", escreva um pensamento, citação ou reflexão curta, edificante e positiva. Mantenha-a com uma ou duas frases. Seja inspirador e gentil. Responda em português.`;
+    const systemInstruction = "Você é um assistente gentil e inspirador. Com base na entrada do diário de gratidão do usuário, escreva um pensamento, citação ou reflexão curta, edificante e positiva. Mantenha-a com uma ou duas frases. Responda em português.";
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: prompt
+        contents: entryText,
+        config: {
+          systemInstruction: systemInstruction,
+        }
     });
 
     const reflectionText = response.text;
