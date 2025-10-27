@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search, CalendarDays, X } from 'lucide-react';
-import { SortOrder } from '../App';
+// Fix: The SortOrder type is defined in types.ts, not App.tsx.
+import { SortOrder } from '../types';
 
 interface FilterControlsProps {
     searchTerm: string;

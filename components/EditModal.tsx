@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { Entry } from '../types';
-import { Save, X } from 'lucide-react';
+import { Save, X, LoaderCircle } from 'lucide-react';
 
 interface EditModalProps {
   entry: Entry;
   onSave: (entry: Entry) => void;
   onClose: () => void;
+  isSaving: boolean;
 }
 
-const EditModal: React.FC<EditModalProps> = ({ entry, onSave, onClose }) => {
+const EditModal: React.FC<EditModalProps> = ({ entry, onSave, onClose, isSaving }) => {
   const [editedText, setEditedText] = useState(entry.text);
 
   const handleSave = () => {
-    if (editedText.trim()) {
+    if (editedText.trim() && !isSaving) {
       onSave({ ...entry, text: editedText.trim() });
     }
   };
@@ -36,20 +37,30 @@ const EditModal: React.FC<EditModalProps> = ({ entry, onSave, onClose }) => {
           rows={6}
           value={editedText}
           onChange={(e) => setEditedText(e.target.value)}
+          disabled={isSaving}
         />
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
             className="flex items-center justify-center gap-2 bg-stone-200 text-stone-700 font-bold py-2 px-4 rounded-lg hover:bg-stone-300 transition-colors dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600"
+            disabled={isSaving}
           >
             <X className="w-5 h-5" /> Cancelar
           </button>
           <button
             onClick={handleSave}
-            disabled={!editedText.trim()}
-            className="flex items-center justify-center gap-2 bg-amber-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-900 transition-colors disabled:bg-stone-400 disabled:cursor-not-allowed dark:bg-amber-600 dark:hover:bg-amber-700 dark:disabled:bg-stone-600"
+            disabled={!editedText.trim() || isSaving}
+            className="flex items-center justify-center gap-2 bg-amber-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-900 transition-colors disabled:bg-stone-400 disabled:cursor-not-allowed dark:bg-amber-600 dark:hover:bg-amber-700 dark:disabled:bg-stone-600 min-w-[180px]"
           >
-            <Save className="w-5 h-5" /> Salvar Alterações
+            {isSaving ? (
+              <>
+                <LoaderCircle className="animate-spin w-5 h-5" /> Salvando...
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" /> Salvar Alterações
+              </>
+            )}
           </button>
         </div>
       </div>

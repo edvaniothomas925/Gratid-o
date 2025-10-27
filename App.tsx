@@ -1,57 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Entry } from './types';
-import { generateReflection } from './services/geminiService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Theme, NotificationType, SortOrder } from './types';
+import { getDailyQuote } from './services/geminiService';
+import { storageService } from './services/storageService';
+import { useJournal } from './hooks/useJournal';
 import EntryForm from './components/EntryForm';
 import EntryList from './components/EntryList';
 import FilterControls from './components/FilterControls';
 import EditModal from './components/EditModal';
-import { Sun, Moon, LogOut, User as UserIcon, X } from 'lucide-react';
-
-// --- Tipo para o Tema ---
-type Theme = 'light' | 'dark';
-export type SortOrder = 'newest' | 'oldest';
-
-// --- Service Logic para gerenciar o armazenamento local ---
-const LOGGED_IN_USER_KEY = 'gratitude-journal-user';
-const ENTRIES_KEY_PREFIX = 'gratitude-entries-';
-const THEME_KEY = 'gratitude-journal-theme';
-
-const storageService = {
-  getCurrentUser: (): string | null => {
-    return localStorage.getItem(LOGGED_IN_USER_KEY);
-  },
-  setCurrentUser: (username: string): void => {
-    localStorage.setItem(LOGGED_IN_USER_KEY, username);
-  },
-  clearCurrentUser: (): void => {
-    localStorage.removeItem(LOGGED_IN_USER_KEY);
-  },
-  getTheme: (): Theme => {
-    const storedTheme = localStorage.getItem(THEME_KEY);
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      return storedTheme;
-    }
-    // Fallback para a preferência do sistema
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  },
-  setTheme: (theme: Theme): void => {
-    localStorage.setItem(THEME_KEY, theme);
-  },
-  loadEntries: (username: string): Entry[] => {
-    try {
-      const storedEntries = localStorage.getItem(`${ENTRIES_KEY_PREFIX}${username}`);
-      if (storedEntries) {
-        return JSON.parse(storedEntries);
-      }
-    } catch (err) { console.error("Falha ao carregar entradas", err); }
-    return [];
-  },
-  saveEntries: (username: string, entries: Entry[]): void => {
-    try {
-      localStorage.setItem(`${ENTRIES_KEY_PREFIX}${username}`, JSON.stringify(entries));
-    } catch (err) { console.error("Falha ao salvar entradas", err); }
-  }
-};
+import Notification from './components/Notification';
+import ConfirmDeleteModal from './components/ConfirmDeleteModal';
+import { Sun, Moon, LogOut, User as UserIcon, X, Sparkles } from 'lucide-react';
 
 // --- Componente de Modal de Anúncio ---
 interface AdModalProps {
@@ -60,6 +18,16 @@ interface AdModalProps {
 
 const AdModal: React.FC<AdModalProps> = ({ onClose }) => {
   const handleModalContentClick = (e: React.MouseEvent) => e.stopPropagation();
+  
+  useEffect(() => {
+    try {
+      // @ts-ignore
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      console.error("AdSense error:", e);
+    }
+  }, []);
+
   return (
     <div 
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in-fast"
@@ -75,8 +43,15 @@ const AdModal: React.FC<AdModalProps> = ({ onClose }) => {
           <X className="w-6 h-6" />
         </button>
         <h3 className="text-sm font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider">Publicidade</h3>
-        <div className="my-4">
-          <img src="https://placehold.co/600x400/FFF8E1/EAB308?text=Seu+Anúncio+Inspirador\nAqui!" alt="Anúncio" className="rounded-lg w-full object-cover" />
+        <div className="my-4 min-h-[250px] flex items-center justify-center bg-stone-100 dark:bg-stone-700 rounded-lg">
+           {/* AdSense Ad Unit */}
+           {/* IMPORTANTE: Substitua 'XXXXXXXXXX' pelo seu ID de Bloco de Anúncios do AdSense */}
+           <ins className="adsbygoogle"
+                style={{ display: 'block', width: '100%' }}
+                data-ad-client="ca-pub-9291553361284974"
+                data-ad-slot="XXXXXXXXXX"
+                data-ad-format="auto"
+                data-full-width-responsive="true"></ins>
         </div>
         <p className="text-lg font-serif text-amber-900 dark:text-amber-300 mb-2">Uma pausa para inspiração!</p>
         <p className="text-stone-600 dark:text-stone-300 text-sm mb-4">Este aplicativo é mantido por anúncios. Agradecemos o seu apoio!</p>
@@ -93,6 +68,7 @@ const AdModal: React.FC<AdModalProps> = ({ onClose }) => {
     </div>
   );
 };
+
 
 // --- Componente da Tela de Login ---
 interface LoginScreenProps {
@@ -131,117 +107,66 @@ interface JournalScreenProps {
   onLogout: () => void;
   theme: Theme;
   toggleTheme: () => void;
+  isApiKeyMissing: boolean;
+  handleApiError: (err: unknown, context: 'quote' | 'entry') => void;
+  notification: { message: string; type: NotificationType } | null;
+  setNotification: React.Dispatch<React.SetStateAction<{ message: string; type: NotificationType } | null>>;
 }
 
-const JournalScreen: React.FC<JournalScreenProps> = ({ user, onLogout, theme, toggleTheme }) => {
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+const JournalScreen: React.FC<JournalScreenProps> = ({ user, onLogout, theme, toggleTheme, isApiKeyMissing, handleApiError, notification, setNotification }) => {
   const [isAdVisible, setIsAdVisible] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterDate, setFilterDate] = useState('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
-  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
-  const [notification, setNotification] = useState<string>('');
+  const [dailyQuote, setDailyQuote] = useState<string>('');
+  const [isQuoteLoading, setIsQuoteLoading] = useState(true);
+
+  const {
+    entries,
+    filteredEntries,
+    editingEntry,
+    deletingEntryId,
+    isSavingEdit,
+    searchTerm,
+    filterDate,
+    sortOrder,
+    hasFilters,
+    addEntry,
+    setSearchTerm,
+    setFilterDate,
+    setSortOrder,
+    clearFilters,
+    handleDeleteEntry,
+    handleConfirmDelete,
+    handleEditEntry,
+    handleSaveEntry,
+    handleShareEntry,
+  } = useJournal({ user, setNotification, handleApiError });
 
   useEffect(() => {
-    setEntries(storageService.loadEntries(user));
-  }, [user]);
+    const fetchQuote = async () => {
+      setIsQuoteLoading(true);
+      try {
+        const quote = await getDailyQuote();
+        setDailyQuote(quote);
+      } catch (err) {
+        handleApiError(err, 'quote');
+      } finally {
+        setIsQuoteLoading(false);
+      }
+    };
+    fetchQuote();
+  }, [handleApiError]);
 
-  useEffect(() => {
-    storageService.saveEntries(user, entries);
-  }, [entries, user]);
-
-  const addEntry = useCallback(async (text: string) => {
-    setError(null);
-    if (!text.trim()) {
-      setError("A entrada não pode estar vazia.");
-      return;
+  const handleAddEntry = async (text: string) => {
+    const success = await addEntry(text);
+    if (success) {
+      setIsAdVisible(true);
     }
-    
-    let newEntry: Entry;
-    try {
-      const reflection = await generateReflection(text);
-      newEntry = { id: Date.now(), date: new Date().toISOString(), text, reflection };
-    } catch (err) {
-      console.error("Error adding new entry:", err);
-      setError("Falha ao gerar reflexão de IA. Sua entrada foi salva sem ela.");
-      newEntry = { id: Date.now(), date: new Date().toISOString(), text, reflection: "Não foi possível gerar uma reflexão neste momento." };
-    }
-    
-    setEntries(prevEntries => [newEntry, ...prevEntries]);
-    setIsAdVisible(true);
-  }, []);
-
-  const clearFilters = () => {
-    setSearchTerm('');
-    setFilterDate('');
   };
-
-  const filteredEntries = useMemo(() => {
-    return entries
-      .filter(entry => {
-        const lowerCaseSearch = searchTerm.toLowerCase();
-        const matchesSearch = searchTerm ?
-          entry.text.toLowerCase().includes(lowerCaseSearch) ||
-          entry.reflection.toLowerCase().includes(lowerCaseSearch) : true;
-
-        const matchesDate = filterDate ?
-          new Date(entry.date).toISOString().startsWith(filterDate) : true;
-
-        return matchesSearch && matchesDate;
-      })
-      .sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-      });
-  }, [entries, searchTerm, filterDate, sortOrder]);
-
 
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return { text: "Bom dia", Icon: Sun };
     if (hour < 18) return { text: "Boa tarde", Icon: Sun };
     return { text: "Boa noite", Icon: Moon };
-  };
-  
-  const handleDeleteEntry = (id: number) => {
-    if (window.confirm("Tem certeza de que deseja apagar esta entrada? Esta ação não pode ser desfeita.")) {
-        setEntries(prev => prev.filter(entry => entry.id !== id));
-    }
-  };
-
-  const handleEditEntry = (entry: Entry) => {
-      setEditingEntry(entry);
-  };
-
-  const handleSaveEntry = (updatedEntry: Entry) => {
-      setEntries(prev => prev.map(entry => entry.id === updatedEntry.id ? updatedEntry : entry));
-      setEditingEntry(null);
-  };
-
-  const handleShareEntry = async (entry: Entry) => {
-      const shareText = `Gratidão do dia:\n"${entry.text}"\n\nReflexão:\n"${entry.reflection}"\n\n- Compartilhado do meu Diário de Gratidão`;
-      if (navigator.share) {
-          try {
-              await navigator.share({
-                  title: 'Meu Momento de Gratidão',
-                  text: shareText,
-              });
-          } catch (error) {
-              console.error('Erro ao compartilhar:', error);
-          }
-      } else {
-          try {
-              await navigator.clipboard.writeText(shareText);
-              setNotification('Copiado para a área de transferência!');
-              setTimeout(() => setNotification(''), 3000);
-          } catch (error) {
-              console.error('Erro ao copiar para a área de transferência:', error);
-              setNotification('Falha ao copiar.');
-              setTimeout(() => setNotification(''), 3000);
-          }
-      }
   };
 
   const { text: greeting, Icon: GreetingIcon } = getGreeting();
@@ -253,14 +178,19 @@ const JournalScreen: React.FC<JournalScreenProps> = ({ user, onLogout, theme, to
         <EditModal 
           entry={editingEntry} 
           onSave={handleSaveEntry} 
-          onClose={() => setEditingEntry(null)} 
+          onClose={() => handleEditEntry(null)} 
+          isSaving={isSavingEdit}
         />
       )}
-      {notification && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-stone-800 text-white py-2 px-4 rounded-lg shadow-lg z-50 animate-fade-in-fast">
-          {notification}
-        </div>
-      )}
+      <ConfirmDeleteModal
+          isOpen={deletingEntryId !== null}
+          onClose={() => handleDeleteEntry(null)}
+          onConfirm={handleConfirmDelete}
+      />
+      <Notification 
+        notification={notification} 
+        onClose={() => setNotification(null)} 
+      />
 
       <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
         <header className="relative text-center mb-8 md:mb-12">
@@ -280,10 +210,23 @@ const JournalScreen: React.FC<JournalScreenProps> = ({ user, onLogout, theme, to
           <h1 className="text-4xl md:text-5xl font-bold font-serif text-amber-900 dark:text-amber-300 mt-2">Diário de Gratidão</h1>
           <p className="text-stone-500 dark:text-stone-400 mt-4 max-w-2xl mx-auto">"A gratidão desbloqueia a plenitude da vida. Ela transforma o que temos em suficiente, e mais." - Melody Beattie</p>
         </header>
+
+        <div className="mb-8 text-center p-6 bg-amber-50/50 dark:bg-stone-800/50 border border-amber-200 dark:border-stone-700 rounded-xl shadow-sm animate-fade-in">
+          <h3 className="text-lg font-serif font-semibold text-amber-800 dark:text-amber-400 mb-2 flex items-center justify-center gap-2">
+            <Sparkles className="w-5 h-5 opacity-80" />
+            Reflexão do Dia
+          </h3>
+          {isQuoteLoading ? (
+            <div className="h-6 bg-stone-200 dark:bg-stone-700 rounded-md animate-pulse w-3/4 mx-auto mt-1"></div>
+          ) : (
+            <blockquote className="text-stone-600 dark:text-stone-300 italic text-lg animate-fade-in-fast mt-1">
+              <p>"{dailyQuote}"</p>
+            </blockquote>
+          )}
+        </div>
         
         <main>
-          {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-600 p-4 mb-6 rounded-r-lg" role="alert"><p>{error}</p></div>}
-          <EntryForm onAddEntry={addEntry} />
+          <EntryForm onAddEntry={handleAddEntry} isApiKeyMissing={isApiKeyMissing} />
           <FilterControls 
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
@@ -292,7 +235,7 @@ const JournalScreen: React.FC<JournalScreenProps> = ({ user, onLogout, theme, to
             sortOrder={sortOrder}
             setSortOrder={setSortOrder}
             clearFilters={clearFilters}
-            hasFilters={!!searchTerm || !!filterDate}
+            hasFilters={hasFilters}
           />
           <EntryList 
              entries={filteredEntries} 
@@ -308,6 +251,8 @@ const JournalScreen: React.FC<JournalScreenProps> = ({ user, onLogout, theme, to
         </footer>
       </div>
       <style>{`
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in 0.6s ease-in-out forwards; }
         @keyframes fade-in-slow { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in-slow { animation: fade-in-slow 0.5s ease-in-out forwards; }
       `}</style>
@@ -331,6 +276,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState<Theme>(storageService.getTheme);
+  const [isApiKeyMissing, setIsApiKeyMissing] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: NotificationType } | null>(null);
 
   // Efeito para aplicar a classe de tema no <html> e salvar no storage
   useEffect(() => {
@@ -347,6 +294,23 @@ const App: React.FC = () => {
       setUser(loggedInUser);
     }
     setIsLoading(false);
+  }, []);
+  
+  const handleApiError = useCallback((err: unknown, context: 'quote' | 'entry') => {
+    if (err instanceof Error && err.message === 'API_KEY_MISSING') {
+      setIsApiKeyMissing(true);
+      const message = "A funcionalidade de IA não está configurada. Adicione a API Key no servidor.";
+      if (context === 'quote') {
+        // Silenciosamente define a cotação de fallback, o formulário mostrará o erro principal.
+      } else {
+        setNotification({ message, type: 'error' });
+      }
+    } else {
+      console.error(`Error with Gemini API during ${context}:`, err);
+      if (context === 'entry') {
+        setNotification({ message: "Falha ao gerar reflexão de IA. Sua entrada foi salva sem ela.", type: 'error' });
+      }
+    }
   }, []);
 
   const handleLogin = (username: string) => {
@@ -371,7 +335,7 @@ const App: React.FC = () => {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  return <JournalScreen user={user} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} />;
+  return <JournalScreen user={user} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} isApiKeyMissing={isApiKeyMissing} handleApiError={handleApiError} notification={notification} setNotification={setNotification} />;
 };
 
 export default App;
